@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top" />
+    <style>
+      /* Make everything use box-sizing for better sizing control */
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: Arial, sans-serif;
+        padding: 12px 16px;
+        margin: 0;
+        width: 100%;
+        /* To avoid horizontal scroll */
+        overflow-x: hidden;
+        background: #fff;
+        color: #202124;
+      }
+
+      h3 {
+        margin-top: 0;
+        margin-bottom: 20px;
+        font-weight: 600;
+        font-size: 1.3em;
+        color: #1a73e8;
+      }
+
+      label {
+        display: block;
+        margin-top: 12px;
+        margin-bottom: 4px;
+        font-weight: 600;
+        font-size: 0.9em;
+        color: #3c4043;
+      }
+
+      select,
+      input[type="text"],
+      textarea {
+        width: 100%;
+        padding: 8px 10px;
+        font-size: 14px;
+        border-radius: 4px;
+        border: 1px solid #dadce0;
+        transition: border-color 0.2s ease;
+        resize: vertical;
+        font-family: inherit;
+      }
+
+      select:focus,
+      input[type="text"]:focus,
+      textarea:focus {
+        border-color: #1a73e8;
+        outline: none;
+      }
+
+      textarea {
+        min-height: 100px;
+        max-height: 200px;
+      }
+
+      button {
+        width: 100%;
+        margin-top: 16px;
+        padding: 12px;
+        font-size: 15px;
+        font-weight: 600;
+        color: white;
+        background-color: #1a73e8;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        transition: background-color 0.2s ease;
+        font-family: inherit;
+        position: relative;
+      }
+
+      button:hover:not(:disabled) {
+        background-color: #1558b0;
+      }
+
+      /* Loading state styles */
+      button:disabled {
+        background-color: #9aa0a6;
+        cursor: not-allowed;
+        opacity: 0.7;
+      }
+
+      .loading-spinner {
+        display: none;
+        width: 16px;
+        height: 16px;
+        border: 2px solid transparent;
+        border-top: 2px solid #fff;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin-right: 8px;
+        vertical-align: middle;
+      }
+
+      button:disabled .loading-spinner {
+        display: inline-block;
+      }
+
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <h3>Mail Merge Plus</h3>
+
+    <label for="templateSelect">Choose a Template:</label>
+    <select id="templateSelect" aria-label="Template selection"></select>
+
+    <label for="emailSubject">Email Subject:</label>
+    <input
+      type="text"
+      id="emailSubject"
+      placeholder="e.g. Congratulations on completing your course!"
+      aria-label="Email subject"
+    />
+
+    <label for="emailBody">Email Body:</label>
+    <textarea
+      id="emailBody"
+      placeholder="Write your email message here... Use {{Name}}, {{Course}}, etc."
+      aria-label="Email body"
+    ></textarea>
+    <input
+      type="text"
+      id="newTemplateName"
+      placeholder="Name for new email template"
+      aria-label="New template name"
+      style="
+        margin-top: 12px;
+        padding: 8px;
+        border-radius: 4px;
+        border: 1px solid #dadce0;
+        width: 100%;
+        box-sizing: border-box;
+      "
+    />
+    <label for="savedTemplates">Import Email Template:</label>
+    <select id="savedTemplates" aria-label="Saved email templates">
+      <option value="">-- Select Template --</option>
+    </select>
+
+    <button id="saveTemplateBtn" onclick="saveEmailTemplate()">
+      <span class="loading-spinner"></span>
+      <span class="button-text">💾 Save Email Template</span>
+    </button>
+
+    <button id="sendEmailBtn" onclick="startMerge()">
+      <span class="loading-spinner"></span>
+      <span class="button-text">🚀 Send Email and Generate PDF</span>
+    </button>
+
+    <script>
+      let templateId = "";
+
+      // Utility functions for button loading states
+      function setButtonLoading(buttonId, loading) {
+        const button = document.getElementById(buttonId);
+        const spinner = button.querySelector(".loading-spinner");
+        const text = button.querySelector(".button-text");
+
+        if (loading) {
+          button.disabled = true;
+          spinner.style.display = "inline-block";
+          if (buttonId === "saveTemplateBtn") {
+            text.textContent = "Saving Template...";
+          } else if (buttonId === "sendEmailBtn") {
+            text.textContent = "Processing...";
+          }
+        } else {
+          button.disabled = false;
+          spinner.style.display = "none";
+          if (buttonId === "saveTemplateBtn") {
+            text.textContent = "💾 Save Email Template";
+          } else if (buttonId === "sendEmailBtn") {
+            text.textContent = "🚀 Send Email and Generate PDF";
+          }
+        }
+      }
+
+      function saveEmailTemplate() {
+        const name = document.getElementById("newTemplateName").value.trim();
+        const subject = document.getElementById("emailSubject").value.trim();
+        const body = document.getElementById("emailBody").value.trim();
+
+        if (!name || !subject || !body) {
+          alert("Please fill in template name, subject, and body.");
+          return;
+        }
+
+        // Set loading state
+        setButtonLoading("saveTemplateBtn", true);
+
+        google.script.run
+          .withSuccessHandler(function () {
+            setButtonLoading("saveTemplateBtn", false);
+            alert("Template saved!");
+            // Clear the template name field
+            document.getElementById("newTemplateName").value = "";
+            // Refresh the template dropdown
+            refreshSavedTemplates();
+          })
+          .withFailureHandler(function (error) {
+            setButtonLoading("saveTemplateBtn", false);
+            alert("Error saving template: " + error.message);
+          })
+          .saveEmailTemplate(name, subject, body);
+      }
+
+      document
+        .getElementById("savedTemplates")
+        .addEventListener("change", function () {
+          const selectedName = this.value;
+          if (selectedName) {
+            google.script.run
+              .withSuccessHandler(function (template) {
+                if (template) {
+                  document.getElementById("emailSubject").value =
+                    template.subject || "";
+                  document.getElementById("emailBody").value =
+                    template.body || "";
+                }
+              })
+              .getEmailTemplateByName(selectedName);
+          }
+        });
+
+      function startMerge() {
+        const templateId = document.getElementById("templateSelect").value;
+        const subject = document.getElementById("emailSubject").value.trim();
+        const body = document.getElementById("emailBody").value.trim();
+
+        if (!templateId || !subject || !body) {
+          alert("Please fill in all required fields.");
+          return;
+        }
+
+        // Set loading state
+        setButtonLoading("sendEmailBtn", true);
+
+        google.script.run
+          .withSuccessHandler(function () {
+            setButtonLoading("sendEmailBtn", false);
+            alert("Merge complete!");
+          })
+          .withFailureHandler(function (error) {
+            setButtonLoading("sendEmailBtn", false);
+            alert("Error: " + error.message);
+          })
+          .generateAndSendEmailsFromTemplateWithEmail(
+            templateId,
+            subject,
+            body
+          );
+      }
+
+      function refreshSavedTemplates() {
+        google.script.run
+          .withSuccessHandler(function (emailTemplates) {
+            const dropdown = document.getElementById("savedTemplates");
+            // Clear existing options except the first one
+            dropdown.innerHTML =
+              '<option value="">-- Select Template --</option>';
+
+            emailTemplates.forEach((t) => {
+              const option = document.createElement("option");
+              option.value = t.name;
+              option.textContent = t.name;
+              dropdown.appendChild(option);
+            });
+          })
+          .getSavedEmailTemplateList();
+      }
+
+      function populateTemplates() {
+        google.script.run
+          .withSuccessHandler(function (docsTemplates) {
+            const select = document.getElementById("templateSelect");
+            docsTemplates.forEach((t) => {
+              const option = document.createElement("option");
+              option.value = t.id;
+              option.textContent = t.name;
+              select.appendChild(option);
+            });
+          })
+          .getAvailableTemplates();
+
+        refreshSavedTemplates();
+      }
+
+      populateTemplates();
+    </script>
+  </body>
+</html>
